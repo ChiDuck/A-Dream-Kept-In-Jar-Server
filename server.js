@@ -8,7 +8,17 @@ app.use(express.json());
 
 // Load service account (downloaded from Firebase)
 // const serviceAccount = JSON.parse(fs.readFileSync("firebase-key.json", "utf8"));
-const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
+let serviceAccount;
+
+if (process.env.FIREBASE_KEY) {
+  // Running on Render (environment variable exists)
+  serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
+  console.log("Using FIREBASE_KEY from environment variable");
+} else {
+  // Running locally (use the file)
+  serviceAccount = JSON.parse(fs.readFileSync("firebase-key.json", "utf8"));
+  console.log("Using local firebase-key.json");
+}
 
 async function getAccessToken() {
   const now = Math.floor(Date.now() / 1000);
