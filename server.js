@@ -7,7 +7,8 @@ const app = express();
 app.use(express.json());
 
 // Load service account (downloaded from Firebase)
-const serviceAccount = JSON.parse(fs.readFileSync("firebase-key.json", "utf8"));
+// const serviceAccount = JSON.parse(fs.readFileSync("firebase-key.json", "utf8"));
+const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
 
 async function getAccessToken() {
   const now = Math.floor(Date.now() / 1000);
