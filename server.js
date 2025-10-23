@@ -26,6 +26,11 @@ setInterval(async () => {
   snapshot.forEach(async (doc) => {
     const data = doc.data();
 
+    if (!data.token || data.token.trim() === "") {
+      console.warn("⚠️ Skipping notification: missing token");
+      return;
+    }
+
     const message = {
       token: data.token,
       notification: {
