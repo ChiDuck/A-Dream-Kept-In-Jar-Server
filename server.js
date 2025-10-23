@@ -17,7 +17,7 @@ const db = getFirestore();
 setInterval(async () => {
   const now = new Date();
 
-  const snapshot = await db.collection("scheduled_notifications")
+  const snapshot = await db.collection("scheduled_notifications_test")
     .where("sent", "==", false)
     .where("cancelled", "==", false)
     .where("sendAt", "<=", now.toISOString())
