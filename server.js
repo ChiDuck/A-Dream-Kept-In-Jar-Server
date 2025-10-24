@@ -1,54 +1,68 @@
 import express from "express";
 import admin from "firebase-admin";
-import { initializeApp, applicationDefault } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { readFileSync } from "fs";
 
 const app = express();
 app.use(express.json());
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_KEY);
+// Load Firebase credentials
+const serviceAccount = JSON.parse(process.env.FIREBASE_KEY || readFileSync("./serviceAccountKey.json", "utf8"));
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
 });
 
-const db = getFirestore();
+const db = admin.firestore();
 
-// 🕒 Every 60s, check for due notifications
+// Function to send notification
+async function sendNotification(token, title, body) {
+  const message = {
+    notification: { title, body },
+    token: token,
+  };
+
+  try {
+    await admin.messaging().send(message);
+    console.log(`✅ Sent notification to token: ${token.substring(0, 10)}...`);
+  } catch (err) {
+    console.error("❌ Error sending:", err);
+  }
+}
+
+// Periodic check for pending notifications
 setInterval(async () => {
-  const now = new Date();
+  console.log("🔍 Checking for pending notifications...");
+  const snapshot = await db.collection("scheduled_notifications_test").get();
 
-  const snapshot = await db.collection("scheduled_notifications_test")
-    .where("sent", "==", false)
-    .where("cancelled", "==", false)
-    .where("sendAt", "<=", now.toISOString())
-    .get();
-
-  snapshot.forEach(async (doc) => {
+  for (const doc of snapshot.docs) {
     const data = doc.data();
+    const { token, deviceId, title, body, scheduledAt } = data;
 
-    if (!data.token || data.token.trim() === "") {
+    // Skip if not yet time
+    if (scheduledAt && scheduledAt.toMillis() > Date.now()) continue;
+
+    let finalToken = token;
+
+    // 🔄 Try to get latest token from device_tokens if missing
+    if (!finalToken && deviceId) {
+      const tokenDoc = await db.collection("device_tokens").doc(deviceId).get();
+      if (tokenDoc.exists) {
+        finalToken = tokenDoc.data().token;
+        console.log(`🔁 Fetched token for ${deviceId}`);
+      } else {
+        console.warn(`⚠️ No token found for deviceId: ${deviceId}`);
+        continue;
+      }
+    }
+
+    if (!finalToken) {
       console.warn("⚠️ Skipping notification: missing token");
-      return;
+      continue;
     }
 
-    const message = {
-      token: data.token,
-      notification: {
-        title: data.title,
-        body: data.body,
-      },
-      android: { priority: "high" },
-    };
+    await sendNotification(finalToken, title || "Notification", body || "");
+    await db.collection("scheduled_notifications_test").doc(doc.id).delete();
+  }
+}, 10000); // check every 10s
 
-    try {
-      await admin.messaging().send(message);
-      await doc.ref.update({ sent: true });
-      console.log("✅ Sent notification:", data.title);
-    } catch (err) {
-      console.error("❌ Error sending:", err);
-    }
-  });
-}, 60000);
-
-app.get("/", (req, res) => res.send("🌼 Notification Scheduler Running"));
-app.listen(3000, () => console.log("🚀 Server listening on port 3000"));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
